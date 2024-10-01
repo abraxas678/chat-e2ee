@@ -4,7 +4,8 @@ import ThemeToggle from "../ThemeToggle/index";
 import imageRetryIcon from "./assets/image-retry.png";
 import DeleteChatLink from "../DeleteChatLink";
 import Button from "../Button";
-import { IChatE2EE } from "@chat-e2ee/service";
+import ShowError from "../ShowError";
+import { IChatE2EE, IE2ECall } from "@chat-e2ee/service";
 
 export const UserStatusInfo = ({
   online,
@@ -17,40 +18,50 @@ export const UserStatusInfo = ({
   getSetUsers: any;
   channelID: any;
   handleDeleteLink: any;
-  chate2ee: IChatE2EE
+  chate2ee: IChatE2EE;
 }) => {
-  const [ call, setCall ] = useState(null);
+  const [call, setCall] = useState<IE2ECall>(null);
   const [loading, setLoading] = useState(false);
-  const [ callState, setCallState ] = useState(undefined);
+  const [callState, setCallState] = useState<RTCPeerConnectionState>(undefined);
+  const [showError, setShowError] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    chate2ee.on('call-added', (call) => {
+    chate2ee.on("call-added", (call) => {
       setCall(call);
     });
 
-    chate2ee.on('call-removed', () => {
+    chate2ee.on("call-removed", () => {
       setCall(null);
-    });
-
-    chate2ee.on('pc-state-changed', (state) => {
-      setCallState(state);
     });
   }, [chate2ee]);
 
+  useEffect(() => {
+    if (call) {
+      call.on("state-changed", () => {
+        setCallState(call.state);
+      });
+    }
+  }, [call]);
   const makeCall = async () => {
-    if(call) {
-      console.error('call is already active');
+    if (call) {
+      console.error("call is already active");
       return;
     }
 
-    const newCall = await chate2ee.startCall();
-    setCall(newCall);
-  }
+    try {
+      const newCall = await chate2ee.startCall();
+      setCall(newCall);
+    } catch (err: any) {
+      setError(err.message);
+      setShowError(true);
+    }
+  };
 
-  const stopCall = async() => {
+  const stopCall = async () => {
     chate2ee.endCall();
     setCall(null);
-  }
+  };
 
   const fetchKeyAgain = async () => {
     if (loading) return;
@@ -62,7 +73,7 @@ export const UserStatusInfo = ({
 
   return (
     <>
-      { call && (<CallStatus state={callState}/>) }
+      {call && <CallStatus state={callState} />}
       <div className={styles.userInfo}>
         {online ? (
           <span className={styles.userInfoOnline}>
@@ -81,34 +92,30 @@ export const UserStatusInfo = ({
             />
           </div>
         )}
-        {
-          online && <CallButton makeCall={makeCall} stopCall={stopCall} call={call}/>
-        }
+        {online && <CallButton makeCall={makeCall} stopCall={stopCall} call={call} />}
         <DeleteChatLink handleDeleteLink={handleDeleteLink} />
         <ThemeToggle />
       </div>
+      {showError && <ShowError errorMessage={error} onClose={() => setShowError(false)} />}
     </>
   );
 };
 
+const CallStatus = ({ state }: { state: any }) => {
+  return <div className={styles.callStatusBar}>Call Status: {state}</div>;
+};
 
-const CallStatus = ({state}: {state:any}) => {
-  return(
-    <div className={styles.callStatusBar}>Call Status: {state}</div>
-  )
-}
-
-const CallButton = ({ makeCall, stopCall, call }: { makeCall: any, stopCall: any, call: any }) => {
+const CallButton = ({ makeCall, stopCall, call }: { makeCall: any; stopCall: any; call: any }) => {
   const callButtonHandler = () => {
-    if(call) {
+    if (call) {
       stopCall();
-    }else {
+    } else {
       makeCall();
     }
-  }
+  };
   return (
     <div>
-      <Button  onClick={callButtonHandler} label = { call ? 'Stop' : 'Call' } type="primary"/>
+      <Button onClick={callButtonHandler} label={call ? "Stop" : "Call"} type="primary" />
     </div>
-  )
-}
+  );
+};
